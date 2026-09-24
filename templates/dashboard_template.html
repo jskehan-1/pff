@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tinker Tinker DFS Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --border: #2a2f3a;
+    --text: #e8eaed; --muted: #9aa2af; --accent: #4fa8ff; --good: #4caf7d;
+    --bad: #e2585d; --warn: #d9a441;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size:14px; }
+  header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+  header h1 { font-size:18px; margin:0; }
+  header .meta { color:var(--muted); font-size:12px; }
+  .tabs { display:flex; gap:4px; padding:10px 20px 0; border-bottom:1px solid var(--border); }
+  .tab { padding:8px 14px; cursor:pointer; color:var(--muted); border-bottom:2px solid transparent; }
+  .tab.active { color:var(--text); border-bottom-color:var(--accent); }
+  .view { display:none; padding:16px 20px; }
+  .view.active { display:block; }
+  .layout { display:grid; grid-template-columns: 1fr 320px; gap:16px; align-items:start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:12px; }
+  .controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  input[type=text], select { background:var(--panel2); border:1px solid var(--border); color:var(--text); padding:6px 8px; border-radius:6px; font-size:13px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { padding:6px 8px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
+  th { position:sticky; top:0; background:var(--panel); cursor:pointer; color:var(--muted); font-weight:600; }
+  th:hover { color:var(--text); }
+  tbody tr:hover { background:var(--panel2); }
+  .tablewrap { max-height:70vh; overflow:auto; }
+  .pos { display:inline-block; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:600; }
+  .pos-QB{background:#3a2a5c;color:#c9a8ff;} .pos-RB{background:#1f3d2e;color:#7bdc9f;}
+  .pos-WR{background:#2b3a5c;color:#8fb8ff;} .pos-TE{background:#5c3a1f;color:#ffb877;}
+  .pos-DST{background:#3a1f1f;color:#ff9d9d;}
+  .value-hi { color:var(--good); font-weight:600; }
+  .value-lo { color:var(--muted); }
+  button { background:var(--accent); color:#0b0f14; border:none; padding:7px 12px; border-radius:6px; font-weight:600; cursor:pointer; }
+  button.secondary { background:var(--panel2); color:var(--text); border:1px solid var(--border); }
+  button:disabled { opacity:0.4; cursor:not-allowed; }
+  .lineup-slot { display:flex; justify-content:space-between; padding:6px 4px; border-bottom:1px dashed var(--border); font-size:13px; }
+  .lineup-slot .empty { color:var(--muted); font-style:italic; }
+  .capbar { height:8px; border-radius:4px; background:var(--panel2); overflow:hidden; margin:8px 0; }
+  .capbar-fill { height:100%; background:var(--accent); }
+  .capbar-fill.over { background:var(--bad); }
+  .small { font-size:12px; color:var(--muted); }
+  .lineup-card { background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:12px; }
+  .lineup-card h3 { margin:0 0 8px; font-size:14px; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; background:var(--panel2); border:1px solid var(--border); margin-left:6px;}
+  .save-hint { font-size:12px; color:var(--muted); margin-top:10px; }
+  #chart { width:100%; height:260px; }
+  .strategy-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:14px; }
+  .strategy-pos-card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:12px; }
+  .strategy-pos-card h3 { margin:0 0 10px; font-size:15px; }
+  .strategy-cat { margin-bottom:12px; }
+  .strategy-cat h4 { margin:0 0 6px; font-size:12px; text-transform:uppercase; letter-spacing:0.03em; color:var(--muted); }
+  .strategy-player { display:flex; justify-content:space-between; align-items:center; padding:5px 6px; border-radius:5px; background:var(--panel2); margin-bottom:4px; font-size:13px; }
+  .strategy-player .info { display:flex; flex-direction:column; }
+  .strategy-player .info .name { font-weight:600; }
+  .strategy-player .info .sub { font-size:11px; color:var(--muted); }
+  .strategy-player button { padding:3px 8px; font-size:12px; }
+  .strategy-empty { font-size:12px; color:var(--muted); font-style:italic; }
+  .status-badge { display:inline-block; padding:1px 6px; border-radius:4px; font-size:10px; font-weight:700; margin-left:4px; background:var(--warn); color:#1a1400; }
+  .status-badge.out { background:var(--bad); color:#fff; }
+  input[type=checkbox] { accent-color: var(--accent); }
+  label.checkbox-label { display:flex; align-items:center; gap:5px; font-size:13px; color:var(--muted); }
+  .matchup-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; }
+  .matchup-great { background:#173a28; color:var(--good); }
+  .matchup-fair { background:#3a3117; color:var(--warn); }
+  .matchup-poor { background:#3a1f1f; color:var(--bad); }
+  .matchup-none { color:var(--muted); font-size:11px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Tinker Tinker &mdash; Weekly DFS Dashboard</h1>
+    <div class="meta" id="meta-line">Loading...</div>
+  </div>
+  <div>
+    <button class="secondary" onclick="saveRosterFile()">Save roster</button>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="build">Build Lineup</div>
+  <div class="tab" data-tab="optimizer">Optimizer Suggestions</div>
+  <div class="tab" data-tab="strategy">Strategy (Boom/Bust)</div>
+  <div class="tab" data-tab="history">Performance History</div>
+</div>
+
+<div style="padding:8px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+  <label class="small" for="projMode" style="color:var(--muted);">Projection model:</label>
+  <select id="projMode">
+    <option value="blend">Season Blend (recency-weighted, incl. 2025)</option>
+    <option value="ewma">EWMA (2026 only, 5-game lookback)</option>
+  </select>
+  <span class="small" id="projModeHint"></span>
+</div>
+
+<div class="view active" id="view-build">
+  <div class="layout">
+    <div class="panel">
+      <div class="controls">
+        <input type="text" id="search" placeholder="Search player or team...">
+        <select id="posFilter">
+          <option value="">All positions</option>
+          <option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>DST</option>
+        </select>
+        <select id="sortKey">
+          <option value="activeProjection">Sort: Projection</option>
+          <option value="activeValue">Sort: Value (pts/$1k)</option>
+          <option value="salary">Sort: Salary</option>
+          <option value="name">Sort: Name</option>
+        </select>
+        <label class="checkbox-label" title="OUT/IR players are already excluded entirely. This hides Questionable/Doubtful/other still-playing designations too."><input type="checkbox" id="hideFlagged"> Also hide Questionable/Doubtful</label>
+        <label class="checkbox-label" title="Notes are collapsed by default to keep the table compact -- check this to show the Notes column."><input type="checkbox" id="showNotes"> Show notes column</label>
+      </div>
+      <div class="tablewrap">
+        <table id="player-table">
+          <thead>
+            <tr><th></th><th>Pos</th><th>Name</th><th>Team</th><th>Game</th><th>Matchup</th><th>Salary</th><th id="th-proj">Proj</th><th id="th-value">Value</th><th title="This player's (or DST's) own DK points last week, 2026 only">Last Wk</th><th title="This player's (or DST's) own DK points, average of the last 3 games, 2026 only">Last 3 Wks</th><th title="DK points the upcoming opponent's defense gave up to this position last week, 2026 only">Opp Last Wk</th><th title="Same, averaged over the opponent's last 3 games, 2026 only">Opp Last 3 Wks</th><th id="th-notes" class="notes-col" style="display:none;">Notes</th></tr>
+          </thead>
+          <tbody id="player-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <h3 style="margin-top:0;">My Lineup</h3>
+      <div id="cap-info" class="small"></div>
+      <div class="capbar"><div class="capbar-fill" id="capbar-fill"></div></div>
+      <div id="lineup-slots"></div>
+      <div style="margin-top:10px; display:flex; gap:8px;">
+        <button class="secondary" onclick="clearLineup()">Clear</button>
+        <button onclick="saveRosterFile()">Save this lineup</button>
+      </div>
+      <p class="save-hint" id="save-hint"></p>
+    </div>
+  </div>
+</div>
+
+<div class="view" id="view-optimizer">
+  <p class="small">These lineups were generated by <code>scripts\optimizer.py</code> at build time.
+  Click "Load into builder" to copy one into the Build Lineup tab where you can tweak it.</p>
+  <div id="optimizer-lineups"></div>
+</div>
+
+<div class="view" id="view-strategy">
+  <p class="small">A stars-and-scrubs / boom-bust build: pair top studs with cheap
+  viable pieces to hit the cap. Top 2 per position in each cut. Click a player to
+  add them straight into your lineup builder slot.</p>
+  <div class="strategy-grid" id="strategy-grid"></div>
+</div>
+
+<div class="view" id="view-history">
+  <div class="panel">
+    <h3 style="margin-top:0;">Week-over-week results</h3>
+    <div id="chart"></div>
+    <div class="tablewrap" style="margin-top:12px;">
+      <table>
+        <thead><tr><th>Week</th><th>Lineup Salary Used</th><th>Projected</th><th>Actual</th><th>Diff</th><th>Notes</th></tr></thead>
+        <tbody id="history-tbody"></tbody>
+      </table>
+    </div>
+    <p class="small">Log actual results here manually, or wire this up to
+    <code>pull_weekly_stats.py</code> output once the week's games are final.</p>
+  </div>
+</div>
+
+<script>
+// ---- DATA INJECTED AT BUILD TIME BY generate_dashboard.py ----
+const DASHBOARD_DATA = __DASHBOARD_DATA_JSON__;
+// ---------------------------------------------------------------
+
+const ROSTER_SLOTS = [
+  {slot:"QB", eligible:["QB"]},
+  {slot:"RB", eligible:["RB"]},
+  {slot:"RB", eligible:["RB"]},
+  {slot:"WR", eligible:["WR"]},
+  {slot:"WR", eligible:["WR"]},
+  {slot:"WR", eligible:["WR"]},
+  {slot:"TE", eligible:["TE"]},
+  {slot:"FLEX", eligible:["RB","WR","TE"]},
+  {slot:"DST", eligible:["DST"]},
+];
+const SALARY_CAP = DASHBOARD_DATA.salaryCap || 50000;
+
+let players = DASHBOARD_DATA.players || [];
+let lineup = new Array(ROSTER_SLOTS.length).fill(null);
+let history = DASHBOARD_DATA.history || [];
+let optimizerLineups = DASHBOARD_DATA.optimizerLineups || [];
+let projectionMode = "blend";
+
+// Bakes the currently-selected projection model into activeProjection/
+// activeValue/activeNotes on every player, and swaps in the matching set of
+// pre-baked optimizer lineups. Everything downstream (table, lineup builder,
+// optimizer tab, strategy tab) reads the "active*" fields, never the raw
+// blend/EWMA ones directly, so the toggle affects the whole dashboard at once.
+function applyProjectionMode() {
+  players.forEach(p => {
+    if (projectionMode === "ewma") {
+      p.activeProjection = p.ewmaProjection != null ? p.ewmaProjection : p.projection;
+      p.activeValue = p.ewmaValue != null ? p.ewmaValue : p.value;
+      p.activeNotes = p.ewmaNotes || p.notes || "";
+    } else {
+      p.activeProjection = p.projection;
+      p.activeValue = p.value;
+      p.activeNotes = p.notes || "";
+    }
+  });
+  optimizerLineups = projectionMode === "ewma"
+    ? (DASHBOARD_DATA.optimizerLineupsEwma || [])
+    : (DASHBOARD_DATA.optimizerLineups || []);
+  const projTh = document.getElementById("th-proj");
+  const valTh = document.getElementById("th-value");
+  if (projTh) projTh.textContent = projectionMode === "ewma" ? "Proj (EWMA)" : "Proj";
+  if (valTh) valTh.textContent = projectionMode === "ewma" ? "Value (EWMA)" : "Value";
+  const hint = document.getElementById("projModeHint");
+  if (hint) hint.textContent = projectionMode === "ewma"
+    ? "* = fewer than 5 games of 2026 data -- showing a placeholder (preseason projection or DK average) instead of a real EWMA."
+    : "";
+}
+applyProjectionMode();
+
+// Load whatever roster was saved for this week (if any) -- built by
+// resolving saved player NAMES against this run's fresh player pool, so
+// projections/matchup/status are always current even for a roster saved days
+// ago. A name that no longer matches (injury exclusion, rename, etc.) is just
+// left as an empty slot rather than failing the whole load.
+const savedRosterNames = DASHBOARD_DATA.savedRosterNames;
+if (savedRosterNames) {
+  let unmatched = 0;
+  lineup = savedRosterNames.map(name => {
+    if (!name) return null;
+    const p = findPlayer(name);
+    if (!p) unmatched++;
+    return p || null;
+  });
+  if (unmatched) {
+    console.warn(`${unmatched} saved roster slot(s) couldn't be matched to a current player (excluded/renamed?) -- left blank.`);
+  }
+}
+
+document.getElementById("meta-line").textContent =
+  `Week ${DASHBOARD_DATA.week ?? "?"} • Season ${DASHBOARD_DATA.season ?? "?"} • ` +
+  `${players.length} players loaded • generated ${DASHBOARD_DATA.generatedAt ?? ""}`;
+
+// ---- tabs ----
+document.querySelectorAll(".tab").forEach(t => {
+  t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+    document.querySelectorAll(".view").forEach(x => x.classList.remove("active"));
+    t.classList.add("active");
+    document.getElementById("view-" + t.dataset.tab).classList.add("active");
+  });
+});
+
+// ---- player table ----
+// Players marked OUT/IR by DK are already excluded upstream in
+// build_projections.py, so anything reaching here with a status is a
+// still-playing designation worth a glance (Q/D/GTD/etc), not an exclusion.
+function isFlagged(p) {
+  return !!(p.status || p.draftAlerts);
+}
+
+function statusBadgeHtml(p) {
+  if (!isFlagged(p)) return "";
+  const label = p.status || "flag";
+  const title = [p.status, p.draftAlerts].filter(Boolean).join(" / ");
+  return `<span class="status-badge" title="${title.replace(/"/g, "&quot;")}">${label}</span>`;
+}
+
+// DIY approximation of PFF's matchup chart -- see scripts/matchup_score.py
+// for methodology. null score means not enough data (new player, DST, or
+// opponent not resolved from the salary file's Game Info column).
+function matchupBadgeHtml(p) {
+  if (p.matchupScore == null) return `<span class="matchup-none">&mdash;</span>`;
+  const cls = p.matchupScore >= 4 ? "great" : (p.matchupScore === 3 ? "fair" : "poor");
+  return `<span class="matchup-badge matchup-${cls}" title="Score ${p.matchupScore}/5">${p.matchupLabel}</span>`;
+}
+
+// Standing preference badge (reference/dfs_strategy_notes.md) -- flags a DST
+// playing a team Jake wants to keep fading (Cleveland, currently).
+function fadeBadgeHtml(p) {
+  if (!p.fadeTarget) return "";
+  return `<span class="status-badge" style="background:var(--good); color:#08150e;" title="Standing fade target -- opponent offense Jake wants faded (see reference/dfs_strategy_notes.md)">FADE</span>`;
+}
+
+function renderTable() {
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const posFilter = document.getElementById("posFilter").value;
+  const sortKey = document.getElementById("sortKey").value;
+  const hideFlagged = document.getElementById("hideFlagged").checked;
+
+  let rows = players.filter(p => {
+    if (posFilter && p.position !== posFilter) return false;
+    if (q && !(p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q))) return false;
+    if (hideFlagged && isFlagged(p)) return false;
+    return true;
+  });
+
+  rows.sort((a, b) => {
+    if (sortKey === "name") return a.name.localeCompare(b.name);
+    return (b[sortKey] ?? 0) - (a[sortKey] ?? 0);
+  });
+
+  const tbody = document.getElementById("player-tbody");
+  tbody.innerHTML = "";
+  for (const p of rows) {
+    const tr = document.createElement("tr");
+    const valueClass = p.activeValue >= 3 ? "value-hi" : "value-lo";
+    const isPlaceholder = projectionMode === "ewma" && (p.games2026 || 0) < 5;
+    const fmtCell = v => (v != null) ? v.toFixed(2) : "&mdash;";
+    tr.innerHTML = `
+      <td><button class="secondary" data-name="${p.name}">Add</button></td>
+      <td><span class="pos pos-${p.position}">${p.position}</span></td>
+      <td>${p.name}${statusBadgeHtml(p)}${fadeBadgeHtml(p)}</td>
+      <td>${p.team}</td>
+      <td class="small">${p.gameInfo || ""}</td>
+      <td>${matchupBadgeHtml(p)}</td>
+      <td>$${p.salary.toLocaleString()}</td>
+      <td title="${(p.activeNotes || "").replace(/"/g, "&quot;")}">${p.activeProjection.toFixed(2)}${isPlaceholder ? '<span class="small">*</span>' : ""}</td>
+      <td class="${valueClass}">${p.activeValue.toFixed(2)}</td>
+      <td class="small">${fmtCell(p.ptsLastWk)}</td>
+      <td class="small">${fmtCell(p.ptsAvg3)}</td>
+      <td class="small">${fmtCell(p.oppPosAllowedLastWk)}</td>
+      <td class="small">${fmtCell(p.oppPosAllowedAvg3)}</td>
+      <td class="small notes-col" style="display:none;">${p.activeNotes || ""}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+  tbody.querySelectorAll("button[data-name]").forEach(btn => {
+    btn.addEventListener("click", () => addToLineup(btn.dataset.name));
+  });
+}
+
+function findPlayer(name) { return players.find(p => p.name === name); }
+
+function addToLineup(name) {
+  const p = findPlayer(name);
+  if (!p) return;
+  // find first open slot this player is eligible for, preferring non-FLEX first
+  let idx = lineup.findIndex((filled, i) => !filled && ROSTER_SLOTS[i].eligible.includes(p.position) && ROSTER_SLOTS[i].slot !== "FLEX");
+  if (idx === -1) idx = lineup.findIndex((filled, i) => !filled && ROSTER_SLOTS[i].eligible.includes(p.position));
+  if (idx === -1) { alert(`No open ${p.position} slot for ${p.name}.`); return; }
+  if (lineup.some(x => x && x.name === p.name)) { alert(`${p.name} is already in your lineup.`); return; }
+  lineup[idx] = p;
+  renderLineup();
+}
+
+function removeFromLineup(idx) { lineup[idx] = null; renderLineup(); }
+function clearLineup() { lineup = new Array(ROSTER_SLOTS.length).fill(null); renderLineup(); }
+
+function renderLineup() {
+  const container = document.getElementById("lineup-slots");
+  container.innerHTML = "";
+  let salaryUsed = 0, projTotal = 0;
+  ROSTER_SLOTS.forEach((slotDef, i) => {
+    const p = lineup[i];
+    if (p) { salaryUsed += p.salary; projTotal += p.activeProjection; }
+    const row = document.createElement("div");
+    row.className = "lineup-slot";
+    row.innerHTML = p
+      ? `<span><span class="pos pos-${p.position}">${slotDef.slot}</span> ${p.name}${statusBadgeHtml(p)} <span class="small">${p.team}</span></span>
+         <span>$${p.salary.toLocaleString()} &middot; ${p.activeProjection.toFixed(1)}pt
+           <button class="secondary" style="padding:2px 6px; margin-left:6px;" onclick="removeFromLineup(${i})">x</button></span>`
+      : `<span class="empty">${slotDef.slot} &mdash; empty</span><span class="small">eligible: ${slotDef.eligible.join("/")}</span>`;
+    container.appendChild(row);
+  });
+  const remaining = SALARY_CAP - salaryUsed;
+  const pct = Math.min(100, (salaryUsed / SALARY_CAP) * 100);
+  const fill = document.getElementById("capbar-fill");
+  fill.style.width = pct + "%";
+  fill.className = "capbar-fill" + (salaryUsed > SALARY_CAP ? " over" : "");
+  document.getElementById("cap-info").textContent =
+    `Salary used: $${salaryUsed.toLocaleString()} / $${SALARY_CAP.toLocaleString()} ` +
+    `(remaining $${remaining.toLocaleString()}) • Projected: ${projTotal.toFixed(2)} pts`;
+}
+
+// Places a flat list of player names into ROSTER_SLOTS order (QB,RB,RB,
+// WR,WR,WR,TE,FLEX,DST), non-FLEX slots first so FLEX only gets whatever's
+// left over. Shared by loadOptimizerLineup() and the optimizer-vs-saved
+// comparison table, so both slot players the same way.
+// Jake's standing preference: whichever RB/WR/TE ends up in FLEX should be
+// the one whose game kicks off LATEST that week (highest salary as the
+// tiebreak, or as the sole sort key if kickoff times aren't populated yet --
+// see GameStart in pull_dk_salaries.py, best-effort/unverified as of
+// 2026-09-23). Rationale: keeping the latest-kicking, priciest flex-eligible
+// player "in reserve" as FLEX gives the longest possible window to swap on
+// last-minute injury news before lock, since DK locks each player at their
+// own game's kickoff, not the whole slate's.
+function flexSortKey(name) {
+  const p = findPlayer(name);
+  if (!p) return [0, 0];
+  const t = p.gameStart ? Date.parse(p.gameStart) : NaN;
+  return [Number.isFinite(t) ? t : -1, p.salary || 0];
+}
+
+function slotPlayersToRoster(names) {
+  const slotted = new Array(ROSTER_SLOTS.length).fill(null);
+  const used = new Set();
+
+  // Pick FLEX first -- but only from whichever position actually has a
+  // "spare" player beyond its dedicated-slot minimum (RB>2, WR>3, or TE>1;
+  // exactly one of the three, by construction of a legal 9-man roster).
+  // Picking from the wrong position here would leave a dedicated slot
+  // short a player below, so this has to match the roster's real surplus,
+  // not just grab any RB/WR/TE. Within that surplus group, latest kickoff
+  // wins, highest salary breaks ties.
+  const DEDICATED_MIN = { RB: 2, WR: 3, TE: 1 };
+  const byPos = { RB: [], WR: [], TE: [] };
+  names.forEach(name => {
+    const p = findPlayer(name);
+    if (p && byPos[p.position]) byPos[p.position].push(name);
+  });
+  const surplusPos = Object.keys(DEDICATED_MIN).find(pos => byPos[pos].length > DEDICATED_MIN[pos]);
+  let flexPick = null;
+  if (surplusPos) {
+    flexPick = byPos[surplusPos].slice().sort((a, b) => {
+      const [ta, sa] = flexSortKey(a);
+      const [tb, sb] = flexSortKey(b);
+      if (tb !== ta) return tb - ta;   // later kickoff first
+      return sb - sa;                  // then higher salary first
+    })[0];
+    used.add(flexPick);
+  }
+
+  ROSTER_SLOTS.forEach((slotDef, i) => {
+    if (slotDef.slot === "FLEX") return;
+    const match = names.find(name => {
+      const p = findPlayer(name);
+      return p && p.position === slotDef.slot && !used.has(name);
+    });
+    if (match) { slotted[i] = findPlayer(match); used.add(match); }
+  });
+
+  const flexIdx = ROSTER_SLOTS.findIndex(s => s.slot === "FLEX");
+  if (flexPick) {
+    slotted[flexIdx] = findPlayer(flexPick);
+  } else {
+    const leftover = names.find(name => !used.has(name));
+    if (leftover) slotted[flexIdx] = findPlayer(leftover);
+  }
+  return slotted;
+}
+
+function loadOptimizerLineup(idx) {
+  const ol = optimizerLineups[idx];
+  if (!ol) return;
+  lineup = slotPlayersToRoster(ol.players);
+  renderLineup();
+  document.querySelector('.tab[data-tab="build"]').click();
+}
+
+// Summarizes the CURRENT lineup (the "My Lineup" builder state) so each
+// optimizer suggestion can show a delta against it, not just its own totals.
+function currentLineupSummary() {
+  const filled = lineup.filter(Boolean);
+  if (!filled.length) return null;
+  const totalSalary = filled.reduce((s, p) => s + p.salary, 0);
+  const totalProjection = filled.reduce((s, p) => s + p.activeProjection, 0);
+  return { players: filled.map(p => p.name), totalSalary, totalProjection, complete: filled.length === ROSTER_SLOTS.length };
+}
+
+function renderOptimizer() {
+  const container = document.getElementById("optimizer-lineups");
+  container.innerHTML = "";
+  if (!optimizerLineups.length) {
+    container.innerHTML = `<p class="small">No optimizer output baked in yet. Run
+      <code>scripts\\optimizer.py</code> and re-run <code>generate_dashboard.py</code>.</p>`;
+    return;
+  }
+
+  const current = currentLineupSummary();
+  const summaryEl = document.createElement("p");
+  summaryEl.className = "small";
+  summaryEl.style.marginBottom = "12px";
+  summaryEl.innerHTML = current
+    ? `Comparing against your current lineup${current.complete ? "" : " (incomplete -- only " + current.players.length + "/9 slots filled)"}: ` +
+      `<strong>${current.totalProjection.toFixed(2)} pts</strong> &middot; $${current.totalSalary.toLocaleString()}`
+    : `No current lineup to compare against yet -- add players in the Build Lineup tab, or load a saved roster, to see deltas here.`;
+  container.appendChild(summaryEl);
+
+  optimizerLineups.forEach((ol, i) => {
+    const card = document.createElement("div");
+    card.className = "lineup-card";
+
+    // Side-by-side, slot-by-slot comparison table: Suggestion name/salary vs.
+// Saved (current) name/salary vs. the salary delta between them, one row
+// per roster slot (QB,RB,RB,WR,WR,WR,TE,FLEX,DST) -- not just a total.
+let comparisonHtml = "";
+    if (current) {
+      const suggestionSlotted = slotPlayersToRoster(ol.players);
+      const pointsDelta = ol.totalProjection - current.totalProjection;
+      const salaryDelta = ol.totalSalary - current.totalSalary;
+
+      const rows = ROSTER_SLOTS.map((slotDef, idx) => {
+        const sug = suggestionSlotted[idx];
+        const saved = lineup[idx];
+        const sugSalary = sug ? sug.salary : null;
+        const savedSalary = saved ? saved.salary : null;
+        const deltaVal = (sugSalary != null && savedSalary != null) ? (sugSalary - savedSalary) : null;
+        const sameName = sug && saved && sug.name === saved.name;
+        const deltaCell = deltaVal == null
+          ? '<span class="small">&mdash;</span>'
+          : `<span style="color:${deltaVal === 0 ? 'var(--muted)' : (deltaVal > 0 ? 'var(--bad)' : 'var(--good)')};">${deltaVal > 0 ? '+' : ''}$${deltaVal.toLocaleString()}</span>`;
+        return `<tr${sameName ? ' style="opacity:0.55;"' : ''}>
+          <td class="small">${slotDef.slot}</td>
+          <td>${sug ? sug.name : '<span class="small">&mdash;</span>'}</td>
+          <td>${sug ? '$' + sug.salary.toLocaleString() : '<span class="small">&mdash;</span>'}</td>
+          <td>${saved ? saved.name : '<span class="small">&mdash;</span>'}</td>
+          <td>${saved ? '$' + saved.salary.toLocaleString() : '<span class="small">&mdash;</span>'}</td>
+          <td>${deltaCell}</td>
+        </tr>`;
+      }).join("");
+
+      comparisonHtml = `
+        <div style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--border);">
+          <div class="small" style="margin-bottom:6px;">
+            Totals vs. your saved lineup: <strong style="color:${pointsDelta >= 0 ? 'var(--good)' : 'var(--bad)'};">${pointsDelta >= 0 ? '+' : ''}${pointsDelta.toFixed(2)} pts</strong>
+            &middot; ${salaryDelta >= 0 ? '+' : ''}$${salaryDelta.toLocaleString()} salary
+          </div>
+          <table style="font-size:12px;">
+            <thead><tr>
+              <th>Slot</th><th>Suggestion</th><th>Suggestion $</th><th>Saved</th><th>Saved $</th><th>$ Delta</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
+
+    card.innerHTML = `<h3>Lineup ${i + 1}
+        <span class="badge">${ol.totalProjection.toFixed(2)} pts</span>
+        <span class="badge">$${ol.totalSalary.toLocaleString()}</span></h3>
+      ${comparisonHtml}
+      <div style="margin-top:8px;"><button class="secondary" onclick="loadOptimizerLineup(${i})">Load into builder</button></div>`;
+    container.appendChild(card);
+  });
+}
+
+// ---- strategy (boom/bust) tab ----
+const STRATEGY_POSITIONS = ["QB", "RB", "WR", "TE", "DST"];
+
+function strategyCategoriesForPosition(pos) {
+  const pool = players.filter(p => p.position === pos);
+
+  const mostPoints = [...pool].sort((a, b) => b.activeProjection - a.activeProjection).slice(0, 2);
+
+  const bestValue = [...pool].sort((a, b) => b.activeValue - a.activeValue).slice(0, 2);
+
+  const cheapestViable = pool.filter(p => p.activeProjection >= 1)
+    .sort((a, b) => a.salary - b.salary).slice(0, 2);
+
+  const safest = pool.filter(p => p.floor !== null && p.floor !== undefined)
+    .sort((a, b) => b.floor - a.floor).slice(0, 2);
+
+  const categories = [
+    { label: "Most Expected Points", players: mostPoints, stat: p => `${p.activeProjection.toFixed(2)} pts` },
+    { label: "Best Value (pts/$1k)", players: bestValue, stat: p => `${p.activeValue.toFixed(2)} val` },
+    { label: "Cheapest Viable (1+ pt proj)", players: cheapestViable, stat: p => `$${p.salary.toLocaleString()}` },
+    { label: "Highest Floor (Safest)", players: safest, stat: p => `${p.floor.toFixed(2)} floor` },
+  ];
+
+  // Standing preference (see reference/dfs_strategy_notes.md): whichever DST
+  // is playing a "fade" offense (Cleveland, currently) is always surfaced
+  // here as a top candidate, independent of its raw projection rank -- this
+  // is a deliberate override of the model, not a projection claim. Re-check
+  // periodically whether the fade premise still holds.
+  if (pos === "DST") {
+    const fadeTargets = pool.filter(p => p.fadeTarget);
+    if (fadeTargets.length) {
+      categories.push({
+        label: "Standing Fade Target (opp. offense)",
+        players: fadeTargets,
+        stat: p => `${p.activeProjection.toFixed(2)} pts`,
+      });
+    }
+  }
+
+  return categories;
+}
+
+function renderStrategy() {
+  const grid = document.getElementById("strategy-grid");
+  grid.innerHTML = "";
+  STRATEGY_POSITIONS.forEach(pos => {
+    const card = document.createElement("div");
+    card.className = "strategy-pos-card";
+    const categories = strategyCategoriesForPosition(pos);
+    card.innerHTML = `<h3><span class="pos pos-${pos}">${pos}</span></h3>` +
+      categories.map(cat => `
+        <div class="strategy-cat">
+          <h4>${cat.label}</h4>
+          ${cat.players.length ? cat.players.map(p => `
+            <div class="strategy-player">
+              <span class="info"><span class="name">${p.name}${statusBadgeHtml(p)}</span><span class="sub">${p.team} &middot; $${p.salary.toLocaleString()}</span></span>
+              <span style="display:flex; align-items:center; gap:6px;">
+                <span class="small">${cat.stat(p)}</span>
+                <button class="secondary" data-add="${p.name}">Add</button>
+              </span>
+            </div>
+          `).join("") : `<div class="strategy-empty">no qualifying players yet</div>`}
+        </div>
+      `).join("");
+    grid.appendChild(card);
+  });
+  grid.querySelectorAll("button[data-add]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      addToLineup(btn.dataset.add);
+      document.querySelector('.tab[data-tab="build"]').click();
+    });
+  });
+}
+
+function renderHistory() {
+  const tbody = document.getElementById("history-tbody");
+  tbody.innerHTML = "";
+  history.forEach(h => {
+    const diff = (h.actual != null && h.projected != null) ? (h.actual - h.projected) : null;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${h.week}</td><td>$${(h.salaryUsed||0).toLocaleString()}</td>
+      <td>${h.projected != null ? h.projected.toFixed(2) : "-"}</td>
+      <td>${h.actual != null ? h.actual.toFixed(2) : "-"}</td>
+      <td>${diff != null ? diff.toFixed(2) : "-"}</td>
+      <td class="small">${h.notes || ""}</td>`;
+    tbody.appendChild(tr);
+  });
+  renderChart();
+}
+
+function renderChart() {
+  const el = document.getElementById("chart");
+  if (!history.length) { el.innerHTML = '<p class="small">No history yet.</p>'; return; }
+  const w = el.clientWidth || 600, h = 260, pad = 30;
+  const maxVal = Math.max(1, ...history.map(x => Math.max(x.projected||0, x.actual||0)));
+  const barW = (w - pad*2) / (history.length * 2.5);
+  let svg = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`;
+  history.forEach((x, i) => {
+    const gx = pad + i * ((w - pad*2) / history.length);
+    const projH = ((x.projected||0) / maxVal) * (h - pad*2);
+    const actH = ((x.actual||0) / maxVal) * (h - pad*2);
+    svg += `<rect x="${gx}" y="${h-pad-projH}" width="${barW}" height="${projH}" fill="#4fa8ff" opacity="0.6"/>`;
+    svg += `<rect x="${gx+barW+4}" y="${h-pad-actH}" width="${barW}" height="${actH}" fill="#4caf7d"/>`;
+    svg += `<text x="${gx+barW}" y="${h-8}" fill="#9aa2af" font-size="11" text-anchor="middle">Wk${x.week}</text>`;
+  });
+  svg += `</svg>`;
+  el.innerHTML = svg;
+}
+
+// Writes the current lineup as a small JSON file into the SAME FOLDER as this
+// dashboard HTML file, so the NEXT regeneration of this same week's dashboard
+// (generate_dashboard.py) loads it automatically. Uses the File System
+// Access API's save picker (Chrome/Edge) so it writes the real file directly
+// -- on browsers without that API (Firefox, or file:// restrictions) it
+// falls back to a normal download that you move next to the dashboard HTML
+// yourself.
+async function saveRosterFile() {
+  const suggestedName = DASHBOARD_DATA.rosterFileName ||
+    `Tinker${String(DASHBOARD_DATA.season % 100).padStart(2, "0")}W${String(DASHBOARD_DATA.week).padStart(2, "0")}_roster.json`;
+  const payload = {
+    season: DASHBOARD_DATA.season,
+    week: DASHBOARD_DATA.week,
+    savedAt: new Date().toISOString(),
+    roster: ROSTER_SLOTS.map((slotDef, i) => {
+      const p = lineup[i];
+      return p ? { slot: slotDef.slot, name: p.name, position: p.position, team: p.team } : { slot: slotDef.slot, name: null };
+    }),
+  };
+  const json = JSON.stringify(payload, null, 2);
+
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName,
+        types: [{ description: "Roster JSON", accept: { "application/json": [".json"] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(json);
+      await writable.close();
+      alert(`Saved ${suggestedName}. Next time you regenerate this week's dashboard, this lineup will load automatically.`);
+      return;
+    } catch (err) {
+      if (err && err.name === "AbortError") return; // user cancelled the picker
+      console.warn("showSaveFilePicker failed, falling back to a plain download.", err);
+    }
+  }
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = suggestedName;
+  a.click();
+  URL.revokeObjectURL(url);
+  alert(`Downloaded ${suggestedName} -- move it into the same folder as this dashboard HTML file ` +
+        `so the next dashboard regeneration for this week picks it up.`);
+}
+
+const saveHintEl = document.getElementById("save-hint");
+if (saveHintEl) {
+  const rosterName = DASHBOARD_DATA.rosterFileName ||
+    `Tinker${String(DASHBOARD_DATA.season % 100).padStart(2, "0")}W${String(DASHBOARD_DATA.week).padStart(2, "0")}_roster.json`;
+  saveHintEl.textContent = `Saves as ${rosterName} into the same folder as this dashboard HTML file ` +
+    `(pick that folder in the save dialog -- same place as this .html file). Regenerating this week's dashboard will load it automatically.`;
+}
+
+document.getElementById("search").addEventListener("input", renderTable);
+document.getElementById("posFilter").addEventListener("change", renderTable);
+document.getElementById("sortKey").addEventListener("change", renderTable);
+document.getElementById("hideFlagged").addEventListener("change", renderTable);
+document.getElementById("showNotes").addEventListener("change", (e) => {
+  const show = e.target.checked;
+  document.querySelectorAll(".notes-col").forEach(el => {
+    el.style.display = show ? "" : "none";
+  });
+});
+document.getElementById("projMode").addEventListener("change", (e) => {
+  projectionMode = e.target.value;
+  applyProjectionMode();
+  renderTable();
+  renderLineup();
+  renderOptimizer();
+  renderStrategy();
+});
+
+renderTable();
+renderLineup();
+renderOptimizer();
+renderStrategy();
+renderHistory();
+</script>
+</body>
+</html>

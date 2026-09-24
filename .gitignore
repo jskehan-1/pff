@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+env/
+
+# Secrets
+.env
+*.env
+
+# Generated dashboards / lineups (rebuilt from scripts + data each week)
+Tinker*.html
+dashboard.html
+*_roster.json
+output/
+
+# Pulled/generated data (reproducible via the pull_*.py / build_*.py scripts)
+data/
+
+# OS/editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
