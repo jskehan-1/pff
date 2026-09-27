@@ -11,6 +11,7 @@ env/
 # Generated dashboards / lineups (rebuilt from scripts + data each week)
 Tinker*.html
 dashboard.html
+FantasyDaily.html
 *_roster.json
 output/
 

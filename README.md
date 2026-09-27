@@ -176,6 +176,42 @@ Christmas, the week 2/3 boundary, etc.).
   you know should have history, and fix names in `CANDIDATES`/normalize
   logic if it's a systematic issue.
 
+## Fantasy daily report (Flounder, Schmidt, Sleeper)
+
+`scripts\fantasy_daily.py` runs every league in `reference\leagues.json`
+(scheduled 6:00am daily via `scripts\fantasy_daily.ps1`; the old "Flounder
+Daily" task still works -- `flounder_daily.ps1` now just calls it). Leagues
+whose season isn't active are skipped.
+
+Output: **`FantasyDaily.html`** in the project root -- a dashboard with one tab
+per league -- plus `data\<league>\reports\<league>_YYYYMMDD.md`. Each tab:
+
+1. **Sit/start** for your team (platform projections in league scoring; ESPN
+   locked players stay put) with PFF snap-share trend.
+2. **Top-3 trade targets**, tracked day to day, each with an offer that never
+   gives up more perceived draft capital than the target cost.
+3. **Roster moves** across every team since the last run (first run backfills
+   the season), with a draft-capital view: auction $ / FAAB (Flounder, with
+   next-yr keeper cost), or snake round.pick + pick-value points (pick 1 = 100,
+   ~-2.5%/pick) for Schmidt and Sleeper. Trades get capital vs value side by side.
+4. **Dropped players** -- everyone rostered this season who's now unrostered.
+
+Managers are shown by name (Flounder short names from `leagues.json`, ESPN
+first names, Sleeper usernames), not team names, since those change.
+
+Draft results: `reference\<league>_draft_2026.csv`, built automatically on the
+first run (`--rebuild-draft` regenerates). Flounder keepers carry their
+OFFICIAL keeper cost + trade fee (`KEEPER_COSTS` in `flounder_common.py`).
+
+Credentials: ESPN leagues are private -- `.env` needs `ESPN_S2_<KEY>` /
+`ESPN_SWID_<KEY>` per league (e.g. `ESPN_S2_FLOUNDER`), or one shared
+`ESPN_S2` / `ESPN_SWID` (same ESPN login covers every league). Copy from
+espn.com cookies (DevTools -> Application -> Cookies). Sleeper needs nothing.
+A 401/403 in `logs\fantasy_daily.log` means re-copy the cookies.
+
+    python scripts\fantasy_daily.py --dry-run            # all leagues, print only
+    python scripts\fantasy_daily.py --league sleeper     # one league
+
 ## Project layout
 
 ```

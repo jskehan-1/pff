@@ -1,0 +1,41 @@
+[
+ {
+  "key": "flounder",
+  "name": "Flounder",
+  "platform": "espn",
+  "league_id": 253826,
+  "my_team": 12,
+  "keeper": {
+   "multiplier": 1.5,
+   "min": 5
+  },
+  "managers": {
+   "1": "Marf",
+   "2": "Demers",
+   "3": "Pin",
+   "4": "Larsen",
+   "5": "Dave",
+   "6": "Dre",
+   "7": "Davis",
+   "8": "Tami",
+   "9": "Wilkens",
+   "10": "Hagan",
+   "11": "Zips",
+   "12": "Jake"
+  }
+ },
+ {
+  "key": "schmidt",
+  "name": "Schmidt Thing",
+  "platform": "espn",
+  "league_id": 63884,
+  "my_team": 15
+ },
+ {
+  "key": "sleeper",
+  "name": "FinalFantasyFütball (Sleeper)",
+  "platform": "sleeper",
+  "league_id": "1389357288178843648",
+  "my_user": "sleeperJake1"
+ }
+]
