@@ -203,9 +203,8 @@ Draft results: `reference\<league>_draft_2026.csv`, built automatically on the
 first run (`--rebuild-draft` regenerates). Flounder keepers carry their
 OFFICIAL keeper cost + trade fee (`KEEPER_COSTS` in `flounder_common.py`).
 
-Credentials: ESPN leagues are private -- `.env` needs `ESPN_S2_<KEY>` /
-`ESPN_SWID_<KEY>` per league (e.g. `ESPN_S2_FLOUNDER`), or one shared
-`ESPN_S2` / `ESPN_SWID` (same ESPN login covers every league). Copy from
+Credentials: ESPN leagues are private -- `.env` needs `ESPN_S2` /
+`ESPN_SWID` (one ESPN login covers every ESPN league). Copy from
 espn.com cookies (DevTools -> Application -> Cookies). Sleeper needs nothing.
 A 401/403 in `logs\fantasy_daily.log` means re-copy the cookies.
 

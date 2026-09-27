@@ -7,8 +7,7 @@ League object, so the report logic doesn't care whether it's ESPN or Sleeper.
 Leagues are configured in reference/leagues.json.
 
 ESPN leagues are private -> need espn.com login cookies in .env:
-    ESPN_S2_<KEY> / ESPN_SWID_<KEY>   (per league, e.g. ESPN_S2_FLOUNDER)
-    or ESPN_S2 / ESPN_SWID            (shared -- one ESPN login covers all leagues)
+    ESPN_S2 / ESPN_SWID   (one ESPN login covers every ESPN league)
 Sleeper's API is public -> no credentials.
 """
 import datetime as dt
@@ -126,12 +125,11 @@ class ESPNClient:
             "{season}/segments/0/leagues/{league}")
 
     def __init__(self, key, league_id, season):
-        s2 = os.getenv(f"ESPN_S2_{key.upper()}") or os.getenv("ESPN_S2")
-        swid = os.getenv(f"ESPN_SWID_{key.upper()}") or os.getenv("ESPN_SWID")
+        s2 = os.getenv("ESPN_S2")
+        swid = os.getenv("ESPN_SWID")
         if not s2 or not swid:
             raise RuntimeError(
-                f"Missing ESPN_S2_{key.upper()}/ESPN_SWID_{key.upper()} (or shared "
-                "ESPN_S2/ESPN_SWID) in .env -- ESPN leagues are private and need "
+                "Missing ESPN_S2/ESPN_SWID in .env -- ESPN leagues are private and need "
                 "your espn.com login cookies.")
         self.url = self.BASE.format(season=season, league=league_id)
         self.s = requests.Session()
