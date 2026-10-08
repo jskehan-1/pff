@@ -630,6 +630,23 @@ def main():
                 opp_pos_allowed_last_wk = allowed_values[0][1]  # already sorted most-recent-first
                 opp_pos_allowed_avg3 = round(sum(v for _, v in allowed_values) / len(allowed_values), 2)
 
+        # DST-specific matchup adjustment -- added 2026-10-08 per Jake. The
+        # OppPosAllowedAvg3 column above was already computed correctly for
+        # DST (using the OPPONENT's own last-3 games, i.e. how many points
+        # opposing D/STs have scored against THIS WEEK'S opponent -- not the
+        # candidate DST's own games, which is a different, easy-to-flip-by-
+        # mistake question), but it was display-only: Projection for every
+        # position is pure own-recency, and matchup_score is explicitly
+        # skipped for DST (see comment above) as "offense-vs-defense doesn't
+        # apply to DST". OppPosAllowedAvg3 is exactly the DST-relevant
+        # matchup signal matchup_score provides for other positions, so it
+        # was simply never being used. Blend it in here, D/ST only.
+        DST_OPPONENT_WEIGHT = 0.35
+        if p["position"] == "DST" and opp_pos_allowed_avg3 != "":
+            projection = round((1 - DST_OPPONENT_WEIGHT) * projection + DST_OPPONENT_WEIGHT * opp_pos_allowed_avg3, 2)
+            value = round(projection / (p["salary"] / 1000), 3) if p["salary"] else 0
+            notes = f"[matchup-adjusted: opponent has allowed {opp_pos_allowed_avg3} avg to D/ST, last 3 wks] " + notes
+
         out_rows.append({
             "Name": p["name"], "Team": p["team"], "Position": p["position"],
             "Salary": p["salary"], "GameInfo": p["game_info"], "GameStart": p.get("game_start", ""),
