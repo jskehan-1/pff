@@ -88,7 +88,7 @@
 <div class="tabs">
   <div class="tab active" data-tab="build">Build Lineup</div>
   <div class="tab" data-tab="optimizer">Optimizer Suggestions</div>
-  <div class="tab" data-tab="strategy">Strategy (Boom/Bust)</div>
+  <div class="tab" data-tab="screens">Screens (Dart Throws / Gold Mine)</div>
   <div class="tab" data-tab="history">Performance History</div>
 </div>
 
@@ -148,11 +148,14 @@
   <div id="optimizer-lineups"></div>
 </div>
 
-<div class="view" id="view-strategy">
-  <p class="small">A stars-and-scrubs / boom-bust build: pair top studs with cheap
-  viable pieces to hit the cap. Top 2 per position in each cut. Click a player to
-  add them straight into your lineup builder slot.</p>
-  <div class="strategy-grid" id="strategy-grid"></div>
+<div class="view" id="view-screens">
+  <p class="small">Dart-throw screens surface cheap, under-the-radar plays the model and
+  recent box scores already like but the market hasn't fully priced in yet -- for simple
+  stud/value rankings, use the Build Lineup tab's own sort. Gold Mine alerts are the
+  separate injury-driven next-man-up signals from <code>scripts\gold_mine_alerts.py</code>.
+  Click a player to add them straight into your lineup builder slot.</p>
+  <div id="gold-mine-section"></div>
+  <div class="strategy-grid" id="screens-grid"></div>
 </div>
 
 <div class="view" id="view-history">
@@ -541,78 +544,130 @@ let comparisonHtml = "";
   });
 }
 
-// ---- strategy (boom/bust) tab ----
-const STRATEGY_POSITIONS = ["QB", "RB", "WR", "TE", "DST"];
+// ---- screens tab: dart-throw screens + gold mine alerts ----
+// Cheap-tier salary cap per position -- a "dart throw" only counts if it's
+// actually cheap for its position; a $7,000 WR having a decent week isn't
+// a dart throw, it's just a good play. Tune these if DK pricing drifts.
+const CHEAP_SALARY_CAP = { QB: 5500, RB: 5500, WR: 4500, TE: 3500, DST: 2500 };
+function cheapCap(pos) { return CHEAP_SALARY_CAP[pos] || 4500; }
 
-function strategyCategoriesForPosition(pos) {
-  const pool = players.filter(p => p.position === pos);
+// Each screen is a distinct lens on "cheap + some independent signal the
+// market hasn't fully priced in" -- see the 2026-10-18 conversation that
+// spec'd these out. A player can and often will show up under more than one
+// screen; that overlap is itself a signal (corroborating signals), not a bug.
+const SCREENS = [
+  {
+    key: "value_gap",
+    label: "Model Likes It, Still Priced Cheap",
+    hint: "Value (pts per $1k, active projection model) at 2.5+ on a salary under the cheap-tier cap for the position.",
+    compute: pool => pool.filter(p => p.salary <= cheapCap(p.position) && p.activeValue >= 2.5)
+      .sort((a, b) => b.activeValue - a.activeValue).slice(0, 6),
+    stat: p => `${p.activeValue.toFixed(2)} val`,
+  },
+  {
+    key: "trend_vs_season",
+    label: "Role Trending Up vs. Season Average",
+    hint: "Recency-weighted (EWMA) projection running 1.3x+ ahead of the player's full-season average -- salary hasn't caught up to the recent role yet.",
+    compute: pool => pool.filter(p => p.salary <= cheapCap(p.position) && p.seasonAvgDKPts > 0 && p.ewmaProjection != null && (p.ewmaProjection / p.seasonAvgDKPts) >= 1.3)
+      .sort((a, b) => (b.ewmaProjection / b.seasonAvgDKPts) - (a.ewmaProjection / a.seasonAvgDKPts)).slice(0, 6),
+    stat: p => `${(p.ewmaProjection / p.seasonAvgDKPts).toFixed(2)}x season avg`,
+  },
+  {
+    key: "recent_box_scores",
+    label: "Last Two Weeks Climbing",
+    hint: "Actual last-game AND 3-game-avg DK points both above the player's season average -- a real in-season trend from the box score, not just model math.",
+    compute: pool => pool.filter(p => p.salary <= cheapCap(p.position) && p.seasonAvgDKPts > 0 && p.ptsLastWk != null && p.ptsAvg3 != null && p.ptsLastWk > p.seasonAvgDKPts && p.ptsAvg3 > p.seasonAvgDKPts)
+      .sort((a, b) => (b.ptsAvg3 - b.seasonAvgDKPts) - (a.ptsAvg3 - a.seasonAvgDKPts)).slice(0, 6),
+    stat: p => `${p.ptsLastWk.toFixed(1)} last wk / ${p.ptsAvg3.toFixed(1)} last 3 (season avg ${p.seasonAvgDKPts.toFixed(1)})`,
+  },
+  {
+    key: "cheap_great_matchup",
+    label: "Cheap + Great Matchup",
+    hint: "Salary under the cheap-tier cap, matchup graded Great against this week's opponent (see scripts\\matchup_score.py).",
+    compute: pool => pool.filter(p => p.salary <= cheapCap(p.position) && p.matchupLabel === "Great")
+      .sort((a, b) => b.activeProjection - a.activeProjection).slice(0, 6),
+    stat: p => `${p.activeProjection.toFixed(2)} pts, Great matchup`,
+  },
+  {
+    key: "ceiling_lottery",
+    label: "High-Ceiling Lottery Tickets",
+    hint: "Salary under the cheap-tier cap, ranked by StdDev -- a true boom/bust dart throw (high variance), not a safe floor play.",
+    compute: pool => pool.filter(p => p.salary <= cheapCap(p.position) && p.stdDev != null)
+      .sort((a, b) => b.stdDev - a.stdDev).slice(0, 6),
+    stat: p => `~${(p.activeProjection + p.stdDev).toFixed(1)} pt ceiling (proj &plusmn;${p.stdDev.toFixed(1)})`,
+  },
+];
 
-  const mostPoints = [...pool].sort((a, b) => b.activeProjection - a.activeProjection).slice(0, 2);
-
-  const bestValue = [...pool].sort((a, b) => b.activeValue - a.activeValue).slice(0, 2);
-
-  const cheapestViable = pool.filter(p => p.activeProjection >= 1)
-    .sort((a, b) => a.salary - b.salary).slice(0, 2);
-
-  const safest = pool.filter(p => p.floor !== null && p.floor !== undefined)
-    .sort((a, b) => b.floor - a.floor).slice(0, 2);
-
-  const categories = [
-    { label: "Most Expected Points", players: mostPoints, stat: p => `${p.activeProjection.toFixed(2)} pts` },
-    { label: "Best Value (pts/$1k)", players: bestValue, stat: p => `${p.activeValue.toFixed(2)} val` },
-    { label: "Cheapest Viable (1+ pt proj)", players: cheapestViable, stat: p => `$${p.salary.toLocaleString()}` },
-    { label: "Highest Floor (Safest)", players: safest, stat: p => `${p.floor.toFixed(2)} floor` },
-  ];
-
-  // Standing preference (see reference/dfs_strategy_notes.md): whichever DST
-  // is playing a "fade" offense (Cleveland, currently) is always surfaced
-  // here as a top candidate, independent of its raw projection rank -- this
-  // is a deliberate override of the model, not a projection claim. Re-check
-  // periodically whether the fade premise still holds.
-  if (pos === "DST") {
-    const fadeTargets = pool.filter(p => p.fadeTarget);
-    if (fadeTargets.length) {
-      categories.push({
-        label: "Standing Fade Target (opp. offense)",
-        players: fadeTargets,
-        stat: p => `${p.activeProjection.toFixed(2)} pts`,
-      });
-    }
-  }
-
-  return categories;
+function screenPlayerRowHtml(p, statHtml) {
+  return `
+    <div class="strategy-player">
+      <span class="info"><span class="name"><span class="pos pos-${p.position}">${p.position}</span> ${p.name}${statusBadgeHtml(p)}</span>
+      <span class="sub">${p.team} &middot; $${p.salary.toLocaleString()}</span></span>
+      <span style="display:flex; align-items:center; gap:6px;">
+        <span class="small">${statHtml}</span>
+        <button class="secondary" data-add="${p.name}">Add</button>
+      </span>
+    </div>`;
 }
 
-function renderStrategy() {
-  const grid = document.getElementById("strategy-grid");
-  grid.innerHTML = "";
-  STRATEGY_POSITIONS.forEach(pos => {
-    const card = document.createElement("div");
-    card.className = "strategy-pos-card";
-    const categories = strategyCategoriesForPosition(pos);
-    card.innerHTML = `<h3><span class="pos pos-${pos}">${pos}</span></h3>` +
-      categories.map(cat => `
-        <div class="strategy-cat">
-          <h4>${cat.label}</h4>
-          ${cat.players.length ? cat.players.map(p => `
-            <div class="strategy-player">
-              <span class="info"><span class="name">${p.name}${statusBadgeHtml(p)}</span><span class="sub">${p.team} &middot; $${p.salary.toLocaleString()}</span></span>
-              <span style="display:flex; align-items:center; gap:6px;">
-                <span class="small">${cat.stat(p)}</span>
-                <button class="secondary" data-add="${p.name}">Add</button>
-              </span>
-            </div>
-          `).join("") : `<div class="strategy-empty">no qualifying players yet</div>`}
-        </div>
-      `).join("");
-    grid.appendChild(card);
-  });
-  grid.querySelectorAll("button[data-add]").forEach(btn => {
+function wireAddButtons(root) {
+  root.querySelectorAll("button[data-add]").forEach(btn => {
     btn.addEventListener("click", () => {
       addToLineup(btn.dataset.add);
       document.querySelector('.tab[data-tab="build"]').click();
     });
   });
+}
+
+function renderScreens() {
+  const grid = document.getElementById("screens-grid");
+  grid.innerHTML = "";
+  const pool = players; // OUT/IR already excluded upstream, same pool as everywhere else
+  SCREENS.forEach(screen => {
+    const hits = screen.compute(pool);
+    const card = document.createElement("div");
+    card.className = "strategy-pos-card";
+    card.innerHTML = `<h3>${screen.label}</h3>
+      <p class="small" style="margin-top:-6px;">${screen.hint}</p>
+      ${hits.length ? hits.map(p => screenPlayerRowHtml(p, screen.stat(p))).join("")
+                     : `<div class="strategy-empty">no qualifying players this week</div>`}`;
+    grid.appendChild(card);
+  });
+  wireAddButtons(grid);
+}
+
+// ---- gold mine alerts (injury-driven next-man-up, scripts\gold_mine_alerts.py) ----
+function renderGoldMine() {
+  const el = document.getElementById("gold-mine-section");
+  const alerts = DASHBOARD_DATA.goldMineAlerts || [];
+  if (!alerts.length) {
+    el.innerHTML = `<div class="panel" style="margin-bottom:14px;">
+      <h3 style="margin-top:0;">Gold Mine Alerts</h3>
+      <p class="small">None baked in for this week -- run <code>scripts\\gold_mine_alerts.py --season ${DASHBOARD_DATA.season} --week ${DASHBOARD_DATA.week}</code>
+      and regenerate this dashboard to populate this section.</p></div>`;
+    return;
+  }
+  const isFreshFlag = a => a.freshness === "new" && (a.tier === "high_confidence" || a.tier === "long_term");
+  const fresh = alerts.filter(isFreshFlag);
+  const otherCount = alerts.length - fresh.length;
+  const row = a => `
+    <div class="strategy-player">
+      <span class="info"><span class="name"><span class="pos pos-${a.position}">${a.position}</span> ${a.backup}</span>
+      <span class="sub">${a.team} &middot; $${Number(a.backupSalary || 0).toLocaleString()} &middot; next in line behind ${a.atRiskStarter} (${a.atRiskStarterStatus})</span></span>
+      <span style="display:flex; align-items:center; gap:6px;">
+        <span class="small" title="${(a.freshnessNote || "").replace(/"/g, "&quot;")}">proj ${a.backupProjection || "&mdash;"} / val ${a.backupValue || "&mdash;"}</span>
+        <button class="secondary" data-add="${a.backup}">Add</button>
+      </span>
+    </div>`;
+  el.innerHTML = `<div class="panel" style="margin-bottom:14px;">
+    <h3 style="margin-top:0;">Gold Mine Alerts <span class="badge">${fresh.length} fresh</span></h3>
+    <p class="small">Backups whose starter\'s Out/Doubtful/IR status is fresh news this week (the starter was still playing
+    normally as of the last completed week) -- old/already-priced-in and Questionable-only alerts are collapsed below.</p>
+    ${fresh.length ? fresh.map(row).join("") : `<div class="strategy-empty">none fresh this week</div>`}
+    ${otherCount ? `<p class="small" style="margin-top:8px;">${otherCount} more ongoing / freshness-unknown / questionable-only
+    alert(s) not itemized here -- see data\\gold_mine_alerts_wk${DASHBOARD_DATA.week}.csv for the full list.</p>` : ""}
+  </div>`;
+  wireAddButtons(el);
 }
 
 function renderHistory() {
@@ -722,13 +777,14 @@ document.getElementById("projMode").addEventListener("change", (e) => {
   renderTable();
   renderLineup();
   renderOptimizer();
-  renderStrategy();
+  renderScreens();
 });
 
 renderTable();
 renderLineup();
 renderOptimizer();
-renderStrategy();
+renderScreens();
+renderGoldMine();
 renderHistory();
 </script>
 </body>

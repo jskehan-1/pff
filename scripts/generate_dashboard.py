@@ -34,12 +34,16 @@ def load_projections(path):
             pts_avg3_raw = row.get("PtsAvg3", "")
             opp_last_raw = row.get("OppPosAllowedLastWk", "")
             opp_avg3_raw = row.get("OppPosAllowedAvg3", "")
+            stddev_raw = row.get("StdDev", "")
+            season_avg_raw = row.get("SeasonAvgDKPts", "")
             players.append({
                 "name": row["Name"], "team": row["Team"], "position": row["Position"],
                 "salary": int(row["Salary"]), "gameInfo": row.get("GameInfo", ""),
                 "gameStart": row.get("GameStart", ""),
                 "projection": float(row["Projection"]), "value": float(row["Value"]),
                 "floor": float(floor_raw) if floor_raw not in (None, "") else None,
+                "stdDev": float(stddev_raw) if stddev_raw not in (None, "") else None,
+                "seasonAvgDKPts": float(season_avg_raw) if season_avg_raw not in (None, "") else None,
                 "status": row.get("Status", ""),
                 "draftAlerts": row.get("DraftAlerts", ""),
                 "matchupScore": int(matchup_raw) if matchup_raw not in (None, "") else None,
@@ -116,6 +120,34 @@ def load_history():
     return rows
 
 
+GOLD_MINE_FIELD_MAP = {
+    "Tier": "tier", "Freshness": "freshness", "Team": "team", "Position": "position",
+    "AtRiskStarter": "atRiskStarter", "AtRiskStarterStatus": "atRiskStarterStatus",
+    "Backup": "backup", "BackupSalary": "backupSalary",
+    "BackupProjection": "backupProjection", "BackupValue": "backupValue",
+    "HistoricalSnapJumpMultiplier": "historicalSnapJumpMultiplier",
+    "SampleSize": "sampleSize", "FreshnessNote": "freshnessNote", "Note": "note",
+}
+
+
+def load_gold_mine_alerts(week):
+    """
+    Bakes in data\\gold_mine_alerts_wk{week}.csv (written by
+    scripts\\gold_mine_alerts.py -- run that first for this week, it's a
+    no-op/empty list here otherwise) so the dashboard's Screens tab can show
+    gold-mine (injury-driven next-man-up) alerts alongside the dart-throw
+    screens, without Jake having to separately open the markdown report.
+    """
+    path = DATA_DIR / f"gold_mine_alerts_wk{week}.csv"
+    if not path.exists():
+        return []
+    alerts = []
+    with open(path, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            alerts.append({js_key: row.get(csv_key, "") for csv_key, js_key in GOLD_MINE_FIELD_MAP.items()})
+    return alerts
+
+
 def dashboard_name(season, week):
     return f"Tinker{season % 100:02d}W{week:02d}.html"
 
@@ -166,6 +198,7 @@ def main():
     optimizer_lineups_ewma = run_optimizer(args.projections, args.lineups, metric="EwmaProjection")
     history = load_history()
     saved_roster_names = load_saved_roster(args.season, args.week)
+    gold_mine_alerts = load_gold_mine_alerts(args.week)
 
     data = {
         "season": args.season, "week": args.week,
@@ -177,6 +210,7 @@ def main():
         "history": history,
         "savedRosterNames": saved_roster_names,
         "rosterFileName": roster_path(args.season, args.week).name,
+        "goldMineAlerts": gold_mine_alerts,
     }
 
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
@@ -187,7 +221,7 @@ def main():
     print(f"Wrote dashboard -> {out_path}")
     print(f"({len(players)} players, {len(optimizer_lineups)} blend-model optimizer lineups, "
           f"{len(optimizer_lineups_ewma)} EWMA-model optimizer lineups, "
-          f"{len(history)} history rows baked in)")
+          f"{len(history)} history rows, {len(gold_mine_alerts)} gold-mine alerts baked in)")
 
 
 if __name__ == "__main__":
