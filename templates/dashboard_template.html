@@ -95,8 +95,8 @@
 <div style="padding:8px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
   <label class="small" for="projMode" style="color:var(--muted);">Projection model:</label>
   <select id="projMode">
+    <option value="ewma" selected>EWMA (2026 only, 5-game lookback)</option>
     <option value="blend">Season Blend (recency-weighted, incl. 2025)</option>
-    <option value="ewma">EWMA (2026 only, 5-game lookback)</option>
   </select>
   <span class="small" id="projModeHint"></span>
 </div>
@@ -185,7 +185,7 @@ let players = DASHBOARD_DATA.players || [];
 let lineup = new Array(ROSTER_SLOTS.length).fill(null);
 let history = DASHBOARD_DATA.history || [];
 let optimizerLineups = DASHBOARD_DATA.optimizerLineups || [];
-let projectionMode = "blend";
+let projectionMode = "ewma";
 
 // Bakes the currently-selected projection model into activeProjection/
 // activeValue/activeNotes on every player, and swaps in the matching set of
@@ -624,6 +624,12 @@ function cheapCap(pos) { return CHEAP_SALARY_CAP[pos] || 4500; }
 // a few positions (often cheap TEs) crowd out everyone else, which is
 // exactly why a real hit like Jaylin Noel (cheap WR2, trending up) didn't
 // show up under the old top-6-overall cut. Per-position cuts fix that.
+// name -> how many of the OG (Season Blend) optimizer lineups include them.
+// Always the blend set, even when the EWMA model is selected.
+const ogOptimizerCounts = new Map();
+(DASHBOARD_DATA.optimizerLineups || []).forEach(ol => (ol.players || []).forEach(name => {
+  ogOptimizerCounts.set(name, (ogOptimizerCounts.get(name) || 0) + 1);
+}));
 const SCREENS = [
   {
     key: "value_gap",
@@ -669,6 +675,15 @@ const SCREENS = [
     compare: (a, b) => b.stdDev - a.stdDev,
     stat: p => `~${(p.activeProjection + p.stdDev).toFixed(1)} pt ceiling (proj &plusmn;${p.stdDev.toFixed(1)})`,
     sortValue: p => p.stdDev,
+  },
+  {
+    key: "og_optimizer",
+    label: "In OG Optimizer Lineups",
+    hint: "Player appears in at least one of the Season Blend (original) model's optimizer lineups (scripts\\optimizer.py), regardless of which projection model is selected. No salary cap filter. Ranked by how many of those lineups include them.",
+    filter: p => ogOptimizerCounts.has(p.name),
+    compare: (a, b) => (ogOptimizerCounts.get(b.name) - ogOptimizerCounts.get(a.name)) || (b.projection - a.projection),
+    stat: p => `in ${ogOptimizerCounts.get(p.name)} of ${(DASHBOARD_DATA.optimizerLineups || []).length} Season Blend optimizer lineups`,
+    sortValue: p => ogOptimizerCounts.get(p.name),
   },
 ];
 
@@ -867,6 +882,35 @@ function renderChart() {
 // -- on browsers without that API (Firefox, or file:// restrictions) it
 // falls back to a normal download that you move next to the dashboard HTML
 // yourself.
+// Browsers can't open a save dialog at an arbitrary path, so the first save
+// asks you to pick the pff folder once; the chosen file's handle is kept in
+// IndexedDB and every later save dialog starts in that same folder.
+const ROSTER_DIR_DB = "pff-dashboard", ROSTER_DIR_KEY = "lastRosterFile";
+function rosterDirDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(ROSTER_DIR_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("handles");
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function loadLastRosterHandle() {
+  try {
+    const db = await rosterDirDb();
+    return await new Promise(resolve => {
+      const req = db.transaction("handles").objectStore("handles").get(ROSTER_DIR_KEY);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) { return null; }
+}
+async function storeLastRosterHandle(handle) {
+  try {
+    const db = await rosterDirDb();
+    db.transaction("handles", "readwrite").objectStore("handles").put(handle, ROSTER_DIR_KEY);
+  } catch (e) { /* remembering the folder is a convenience only */ }
+}
+
 async function saveRosterFile() {
   const suggestedName = DASHBOARD_DATA.rosterFileName ||
     `Tinker${String(DASHBOARD_DATA.season % 100).padStart(2, "0")}W${String(DASHBOARD_DATA.week).padStart(2, "0")}_roster.json`;
@@ -883,13 +927,17 @@ async function saveRosterFile() {
 
   if (window.showSaveFilePicker) {
     try {
+      const lastHandle = await loadLastRosterHandle();
       const handle = await window.showSaveFilePicker({
         suggestedName,
+        id: "pff-roster",
+        startIn: lastHandle || "documents",
         types: [{ description: "Roster JSON", accept: { "application/json": [".json"] } }],
       });
       const writable = await handle.createWritable();
       await writable.write(json);
       await writable.close();
+      await storeLastRosterHandle(handle);
       alert(`Saved ${suggestedName}. Next time you regenerate this week's dashboard, this lineup will load automatically.`);
       return;
     } catch (err) {
@@ -913,7 +961,7 @@ if (saveHintEl) {
   const rosterName = DASHBOARD_DATA.rosterFileName ||
     `Tinker${String(DASHBOARD_DATA.season % 100).padStart(2, "0")}W${String(DASHBOARD_DATA.week).padStart(2, "0")}_roster.json`;
   saveHintEl.textContent = `Saves as ${rosterName} into the same folder as this dashboard HTML file ` +
-    `(pick that folder in the save dialog -- same place as this .html file). Regenerating this week's dashboard will load it automatically.`;
+    `(pick the pff folder the first time -- the save dialog remembers it after that). Regenerating this week's dashboard will load it automatically.`;
 }
 
 document.getElementById("search").addEventListener("input", renderTable);
