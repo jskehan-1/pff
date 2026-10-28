@@ -62,14 +62,14 @@ def load_projections(path):
     return players
 
 
-def run_optimizer(projections_path, n_lineups, metric="Projection"):
+def run_optimizer(projections_path, n_lineups, metric="Projection", stack=0):
     """Run optimizer.py as a subprocess and parse its printed lineups back
     into structured data (keeps optimizer.py itself simple/CLI-first)."""
     script = Path(__file__).resolve().parent / "optimizer.py"
     try:
         result = subprocess.run(
             [sys.executable, str(script), "--projections", str(projections_path),
-             "--lineups", str(n_lineups), "--metric", metric],
+             "--lineups", str(n_lineups), "--metric", metric, "--stack", str(stack)],
             capture_output=True, text=True, check=True,
         )
     except FileNotFoundError:
@@ -196,6 +196,8 @@ def main():
     players = load_projections(args.projections)
     optimizer_lineups = run_optimizer(args.projections, args.lineups, metric="Projection")
     optimizer_lineups_ewma = run_optimizer(args.projections, args.lineups, metric="EwmaProjection")
+    # "Safe" model: Floor + QB with 1 of his WR/TE -- the steadiest angle in the 2026 wk1-6 backtest.
+    optimizer_lineups_safe = run_optimizer(args.projections, args.lineups, metric="Floor", stack=1)
     history = load_history()
     saved_roster_names = load_saved_roster(args.season, args.week)
     gold_mine_alerts = load_gold_mine_alerts(args.week)
@@ -207,6 +209,7 @@ def main():
         "players": players,
         "optimizerLineups": optimizer_lineups,
         "optimizerLineupsEwma": optimizer_lineups_ewma,
+        "optimizerLineupsSafe": optimizer_lineups_safe,
         "history": history,
         "savedRosterNames": saved_roster_names,
         "rosterFileName": roster_path(args.season, args.week).name,
@@ -221,6 +224,7 @@ def main():
     print(f"Wrote dashboard -> {out_path}")
     print(f"({len(players)} players, {len(optimizer_lineups)} blend-model optimizer lineups, "
           f"{len(optimizer_lineups_ewma)} EWMA-model optimizer lineups, "
+          f"{len(optimizer_lineups_safe)} safe (Floor + stack) optimizer lineups, "
           f"{len(history)} history rows, {len(gold_mine_alerts)} gold-mine alerts baked in)")
 
 

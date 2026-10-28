@@ -95,7 +95,8 @@
 <div style="padding:8px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
   <label class="small" for="projMode" style="color:var(--muted);">Projection model:</label>
   <select id="projMode">
-    <option value="ewma" selected>EWMA (2026 only, 5-game lookback)</option>
+    <option value="safe" selected>Safe: Floor + QB stack (best in backtest)</option>
+    <option value="ewma">EWMA (2026 only, 5-game lookback)</option>
     <option value="blend">Season Blend (recency-weighted, incl. 2025)</option>
   </select>
   <span class="small" id="projModeHint"></span>
@@ -185,7 +186,7 @@ let players = DASHBOARD_DATA.players || [];
 let lineup = new Array(ROSTER_SLOTS.length).fill(null);
 let history = DASHBOARD_DATA.history || [];
 let optimizerLineups = DASHBOARD_DATA.optimizerLineups || [];
-let projectionMode = "ewma";
+let projectionMode = "safe";
 
 // Bakes the currently-selected projection model into activeProjection/
 // activeValue/activeNotes on every player, and swaps in the matching set of
@@ -194,7 +195,11 @@ let projectionMode = "ewma";
 // blend/EWMA ones directly, so the toggle affects the whole dashboard at once.
 function applyProjectionMode() {
   players.forEach(p => {
-    if (projectionMode === "ewma") {
+    if (projectionMode === "safe") {
+      p.activeProjection = p.floor != null ? p.floor : 0;
+      p.activeValue = p.salary ? p.activeProjection / (p.salary / 1000) : 0;
+      p.activeNotes = p.notes || "";
+    } else if (projectionMode === "ewma") {
       p.activeProjection = p.ewmaProjection != null ? p.ewmaProjection : p.projection;
       p.activeValue = p.ewmaValue != null ? p.ewmaValue : p.value;
       p.activeNotes = p.ewmaNotes || p.notes || "";
@@ -204,11 +209,15 @@ function applyProjectionMode() {
       p.activeNotes = p.notes || "";
     }
   });
-  optimizerLineups = projectionMode === "ewma"
+  optimizerLineups = projectionMode === "safe"
+    ? (DASHBOARD_DATA.optimizerLineupsSafe || [])
+    : projectionMode === "ewma"
     ? (DASHBOARD_DATA.optimizerLineupsEwma || [])
     : (DASHBOARD_DATA.optimizerLineups || []);
   const hint = document.getElementById("projModeHint");
-  if (hint) hint.textContent = projectionMode === "ewma"
+  if (hint) hint.textContent = projectionMode === "safe"
+    ? "Proj = Floor (a bad-day outcome); optimizer lineups also stack the QB with 1+ of his WR/TE. Steadiest angle in the 2026 wk1-6 backtest."
+    : projectionMode === "ewma"
     ? "* = fewer than 5 games of 2026 data -- showing a placeholder (preseason projection or DK average) instead of a real EWMA."
     : "";
 }
@@ -586,11 +595,13 @@ const BASE_COLUMNS = [
     title: "DIY approximation of PFF's matchup chart (scripts\\matchup_score.py): how favorable this position's matchup is against the upcoming opponent (Great/Fair/Poor, scored 1-5). Click to sort by score." },
   { id: "salary", label: "Salary", sortable: true, getValue: p => p.salary,
     title: "This week's DraftKings salary." },
-  { id: "proj", label: () => projectionMode === "ewma" ? "Proj (EWMA)" : "Proj", sortable: true, getValue: p => p.activeProjection,
-    title: () => projectionMode === "ewma"
+  { id: "proj", label: () => projectionMode === "safe" ? "Floor" : projectionMode === "ewma" ? "Proj (EWMA)" : "Proj", sortable: true, getValue: p => p.activeProjection,
+    title: () => projectionMode === "safe"
+      ? "Floor -- a bad-day DK points outcome from the season blend model. Blank floors (no history) count as 0."
+      : projectionMode === "ewma"
       ? "Projected DK points -- EWMA model (weighted average of the last 5 2026 games only, no 2025 history)."
       : "Projected DK points -- season blend model (recency-weighted average including 2025 history)." },
-  { id: "value", label: () => projectionMode === "ewma" ? "Value (EWMA)" : "Value", sortable: true, getValue: p => p.activeValue,
+  { id: "value", label: () => projectionMode === "safe" ? "Value (Floor)" : projectionMode === "ewma" ? "Value (EWMA)" : "Value", sortable: true, getValue: p => p.activeValue,
     title: "Value = active-model Projection \u00f7 Salary \u00d7 1000 -- projected points per $1,000 of salary. Higher means more points per dollar." },
   { id: "ptsLastWk", label: "Last Wk", sortable: true, getValue: p => p.ptsLastWk,
     title: "This player's (or DST's) own actual DK points in their most recent completed game, 2026 only." },
